@@ -20,8 +20,8 @@ function initialize_MPS(N::Int64, d::Int64, D::Int64)::Vector{Array{ComplexF64}}
     If we label the first, second and third index of this 3-array
     as 1,2,3 and call the array on each site M then schematically storage is done as:
 
-        3
-        |
+         3
+         |
     1 -- M -- 2 , where 1 and 2 are the left and right bond indices that control entanglement between sites and 3 is the physical index. 
 
     Note 1: This function assumes both bond indices has the same dimension.
@@ -50,21 +50,7 @@ function initialize_MPS(N::Int64, d::Int64, D::Int64)::Vector{Array{ComplexF64}}
 
 end
 
-# # The command to generate the variational_MPS_algorithm.jl.mem file is:
-# # 
-# # julia --track-allocation=user variational_MPS_algorithm.jl
-# #
-# # Then you run the variational_MPS_algorithm.jl and then open the .mem file which will contain the number of memory allocations
-
-# function wrapper() # so as to not misallocate and focus on the function we want to probe
-# initialize_MPS(4,2,2) # force compilation
-# Profile.clear_malloc_data() # clear allocation
-# initialize_MPS(4,2,2) # run again without compilation
-# end
-
-# wrapper()
-
-function contraction(A, c_A::Tuple, B, c_B::Tuple)
+function contraction(A, c_A::Tuple, B, c_B::Tuple)::Array{ComplexF64}
 
     """
     The contraction function takes 2 tensors A, B and 2 tuples c_A, c_B and returns
@@ -191,10 +177,10 @@ function get_Ising_MPO(N::Int64, J::Float64, g_x::Float64, g_z::Float64)::Vector
     vector of N elements, 1 element for each lattice site, and at site or in other words each element is a 4-tensor or in memory a 
     4-array with the indices stored as shown below.
 
-        sigma_i                                              3
-            |                                                 |
+          sigma_i                                              3
+             |                                                 |
     alpha -- Wi -- beta , which is stored in the order: 1 -- mpo[i] -- 2
-            |                                                 |
+             |                                                 |
         sigma_i_dash                                           4      
 
     Note 1: The indices are stored in the order alpha, beta, sigma_i, sigma_i_dash. The first two are the left and right bond indices
@@ -292,7 +278,32 @@ function get_Ising_MPO(N::Int64, J::Float64, g_x::Float64, g_z::Float64)::Vector
 
 end
 
-function get_identity_MPO(N::Int64, d::Int64) # See get_identity_MPO notes on personal website 
+function get_identity_MPO(N::Int64, d::Int64)::Vector{Array{ComplexF64}}
+
+    """
+    Creates the identity MPO for a lattice of N sites with d degrees of freedom per site.
+
+    Inputs:
+
+    N = number of lattice sites (Integer)
+
+    d = number of degrees of freedom per site - eg: d = 2 in the Ising model of spin-1/2 for spin up and spin down along z (Integer)
+
+    Outputs:
+
+    mpo = identity mpo as a vector of N elements and each element is a 4-tensor storing indices in the order shown schematically below
+
+          sigma_i                                              3
+             |                                                 |
+    alpha -- Wi -- beta , which is stored in the order: 1 -- mpo[i] -- 2
+             |                                                 |
+         sigma_i_dash                                          4 
+
+
+    In other words each tensor on each site has indices W_alpha,beta,sigma_i,sigma_i_dash
+    """
+
+    # See get_identity_MPO notes on personal website 
 
     # TODO: add goodnotes to personal website
 
@@ -308,10 +319,12 @@ function get_identity_MPO(N::Int64, d::Int64) # See get_identity_MPO notes on pe
 
 end
 
-function gauge_site(form::Form, M_initial::Array)::Tuple{Array, Array} # Julia is call by reference for arrays which are mutable so manipulations on M_initial in this function will reflect on the original unless we remove that reference with eg M = permutedims(M_initial, (1,2,3))
+function gauge_site(form::Form, M_initial::Array{ComplexF64})::Tuple{Array{ComplexF64}, Array{ComplexF64}}
 
     """
     Gauges a site into left or right canonical form
+
+    Note 1: See Schollwock equations (136), (137) at link: https://arxiv.org/pdf/1008.3477.pdf
 
     Inputs: 
 
@@ -324,7 +337,9 @@ function gauge_site(form::Form, M_initial::Array)::Tuple{Array, Array} # Julia i
     If left: A, SVt # A_(a_i-1)(s_i)(sigma_i), SVt_(s_i)(a_i) and If right: US, B # US_(a_i-1)(s_i-1), B_(s_i-1)(a_i)(sigma_i)
     """
 
-    if form == right # See Schollwock equation (137) for right canonical form
+    # Julia is call by reference for arrays which are mutable so manipulations on M_initial in this function will reflect on the original unless we remove that reference with eg M = permutedims(M_initial, (1,2,3))
+
+    if form == right # See Schollwock equation (137) for right canonical form (link: https://arxiv.org/pdf/1008.3477.pdf)
 
         D_left, D_right, d = size(M_initial) # Dimensions of indices of site represented by M_initial to be SVD decomposed
         # The next line is enough to remove the reference on M_initial so that it does not mutate the original M_initial and just uses its value, hence the gauge_site function does not mutate M_initial at all
@@ -360,7 +375,7 @@ function gauge_site(form::Form, M_initial::Array)::Tuple{Array, Array} # Julia i
 
 end
 
-function gauge_mps!(form::Form, mps::Vector, normalized::Bool, N::Int64) # In Julia, it's a convention to append ! to names of functions that modify their arguments.
+function gauge_mps!(form::Form, mps::Vector{Array{ComplexF64}}, normalized::Bool, N::Int64)
 
     """
     This function calls the function gauge_site for all sites on a lattice putting the MPS in left or right canonical form
@@ -380,6 +395,8 @@ function gauge_mps!(form::Form, mps::Vector, normalized::Bool, N::Int64) # In Ju
     This function does not return anything. As suggested by the exclamation mark which is conventionally placed in its name (when
     the given function mutates the input), it mutates the input mps.
     """
+
+    # In Julia, it's a convention to append ! to names of functions that modify their arguments.
 
     if form == right
 
@@ -419,10 +436,12 @@ function gauge_mps!(form::Form, mps::Vector, normalized::Bool, N::Int64) # In Ju
     end
 end
 
-function inner_product_MPS(mps_1::Vector, mps_2::Vector)::ComplexF64 # See Schollwock equation (95)
+function inner_product_MPS(mps_1::Vector{Array{ComplexF64}}, mps_2::Vector{Array{ComplexF64}})::ComplexF64
 
     """
     Computes the inner product of two MPS as <mps_1|mps_2>
+
+    Note 1: See Schollwock equation (95)
 
     Inputs:
 
@@ -462,11 +481,37 @@ function inner_product_MPS(mps_1::Vector, mps_2::Vector)::ComplexF64 # See Schol
         
 end
 
-function initialize_L_R_states(mps, mpo, N)
+function initialize_L_R_states(mps::Vector{Array{ComplexF64}}, mpo::Vector{Array{ComplexF64}}, N::Int64)::Vector{Array{ComplexF64}}
 
-    # We will assume that we start with a left sweep so we need the L_R_states vector to be all R states
+    """
+    Creates a vector called states which holds the partial contractions of the left and right components of the effective Hamiltonian 
+    which emerges each time we are trying to update a site with the eigensolver (see Schollwock Figure 38, 39 and equation (210)). We
+    store in the first and last elements of the vector tensors of dimension 1x1x1 with value 1 so as to contract with the trivial 
+    indices that stick out at the very left and very right of an <mps|mpo|mps> diagram (see for example Schollwock equation (192) which
+    contains 3 trivial indices labeled 1 on the A tensor and W tensor that live on site 1).
 
-    states = Vector{Array{ComplexF64}}(undef, N+1)
+    Inputs:
+
+    mps = This will be the initial mps once we start the algorithm and its a vector of tensors of complex numbers 
+
+    mpo = The mpo Hamiltonian we are investigating which is a vector of tensors of complex numbers
+
+    N = number of lattice sites (Integer)
+
+    Outputs:
+
+    Below is a schematic example of what the output vector will store for N = 5 where R_1 is the right most site - which is site N - 
+    triple of bra mps, mpo and ket mps as shown in Schollwock Figure 39. Then R_2 will be the contraction of R_1 with the triple at 
+    site N-1 of bra mps, mpo and ket mps and so on up to the triple at site 2. We go down to site 2 and not site 1 because we will 
+    start the algorithm by trying to update site 1 using the eigensolver and so the effective Hamiltonian as shown in Schollwock
+    Figure 38 will consist of the contraction of the triples found at site 2,3,4,...,N.
+
+    states = [1x1x1 of value 1, R_4, R_3, R_2, R_1, 1x1x1 of value 1] 
+    """
+
+    # We will assume that we start with a left sweep so we need the L_R_states vector to be all R states initially
+
+    states = Vector{Array{ComplexF64}}(undef, N+1) # This vector will hold the partial contractions of the left and right parts of the effective Hamiltonian see for example Schollwock Figure 38, 39
 
     states[1] = ones(ComplexF64, 1, 1, 1)
     states[N+1] = ones(ComplexF64, 1, 1, 1)
@@ -483,7 +528,28 @@ function initialize_L_R_states(mps, mpo, N)
 
 end
 
-function get_Heff(L, W, R)
+function get_Heff(L::Array{ComplexF64}, W::Array{ComplexF64}, R::Array{ComplexF64})::Tuple{Array{ComplexF64}, NTuple{6, Int64}}
+
+    """
+    Calculates the effective Hamiltonian as shown in Schollwock Figure 38 and returns it as a matrix with indices grouped exactly as
+    shown in Schollwock below equation (209), namely H_(sigma_l,a_l-1,a_l)(sigma_l_dash,a_l-1_dash,a_l_dash). It also returns the 
+    dimensions of the indices found in the effective Hamiltonian before we reshape it to a matrix. The dimensions of the indices are
+    in the order sigma_l, a_l-1, a_l, sigma_l_dash, a_l-1_dash, a_l_dash.
+
+    Note 1: Where we specify the return type in the function signature we are hard coding that the effective Hamiltonian will have initially 6 open indices before reshaping it (see NTuple{6, Int64}).
+
+    Inputs:
+
+    L = the fully contracted left part of the effective Hamiltonian - see Schollwock equation (192) (3-tensor array with indices in the order a_l-1,b_l-1,a_l-1_dash) - note site l is the site we are trying to update with the eigensolver
+
+    W = the mpo tensor at the site l we are going to update with the eigensolver (4-tensor array with indices b_l-1,b_l,sigma_l,sigma_l_dash)
+
+    R = the fully contracted right part of the effective Hamiltonian - see Schollwock equation (193) (3-tensor array with indices in the order a_l,b_l,a_l_dash)
+
+    Outputs:
+
+    Heff, dimensions = effective Hamiltonian as matrix of two indices H_(sigma_l,a_l-1,a_l)(sigma_l_dash,a_l-1_dash,a_l_dash), dimensions of the indices in the order: sigma_l, a_l-1, a_l, sigma_l_dash, a_l-1_dash, a_l_dash
+    """
 
     Heff = contraction(L, (2,), W, (1,))
     Heff = contraction(Heff, (3,), R, (2,))
@@ -495,10 +561,27 @@ function get_Heff(L, W, R)
 
 end
 
-function get_updated_site(L, W, R)
+function get_updated_site(L::Array{ComplexF64}, W::Array{ComplexF64}, R::Array{ComplexF64})::Tuple{Array{ComplexF64}, ComplexF64}
+
+    """
+    We give the eigensolver the effective Hamiltonian as a matrix with 2 indices and we get back the lowest eigenvalue and the lowest 
+    eigenvector of this matrix and we name them E and M. This M will update the site we are trying to minimize the energy with.
+
+    Inputs:
+
+    L = the fully contracted left part of the effective Hamiltonian - see Schollwock equation (192) (3-tensor array with indices in the order a_l-1,b_l-1,a_l-1_dash) - note site l is the site we are trying to update with the eigensolver
+
+    W = the mpo tensor at the site l we are going to update with the eigensolver (4-tensor array with indices b_l-1,b_l,sigma_l,sigma_l_dash)
+
+    R = the fully contracted right part of the effective Hamiltonian - see Schollwock equation (193) (3-tensor array with indices in the order a_l,b_l,a_l_dash)
+    
+    Outputs:
+
+    M, E[1] = updates site of the mps with indices a_l-1, a_l, sigma_l (see Schollwock above equation (210)), ground state energy approximation
+    """
 
     Heff, dimensions = get_Heff(L, W, R)
-    E, M = eigs(Heff, nev=1, which=:SR) # Understand what this does and the input
+    E, M = eigs(Heff, nev=1, which=:SR) # nev = 1 => it will return only 1 number of eigenvalues, SR => compute eigenvalues which have the smallest real part (ie the ground state energy and upwards depending on nev)
     M = reshape(M, (dimensions[1], dimensions[2], dimensions[3])) # M is reshaped in the form sigma_i, a_i-1, a_i
     M = permutedims(M, (2,3,1)) # M is permuted into the form a_i-1, a_i, sigma_i
 
@@ -506,7 +589,32 @@ function get_updated_site(L, W, R)
 
 end
 
-function update_states!(sweep_direction::Form, states, M, W, i)
+function update_states!(sweep_direction::Form, states::Vector{Array{ComplexF64}}, M::Array{ComplexF64}, W::Array{ComplexF64}, i::Int64)
+
+    """
+    Mutates the states vector which holds the partial contractions for the effective Hamiltonian shown in Schollwock Figure 38. We have
+    just optimised the tensor at site i and we are calculating the triple of bra mps, mpo and ket mps as shown in Schollwock Figure 39
+    and contracting it with element i-1 in the states vector if we are growing the L part of the effective Hamiltonian (ie sweeping 
+    from left to right) or we are contracting it with element i+1 in the states vector if we are growing the R part of the effective
+    Hamiltonian (ie sweeping from right to left).
+
+    Inputs:
+
+    sweep_direction = which way we are currently sweeping towards (Form enumarative type)
+
+    states = holds the partial contractions for the effective Hamiltonian
+
+    M = the tensor which was recently returned by the eigensolver which optimized the tensor on the site of the mps 
+
+    W = the mpo at the site we just updated
+
+    i = lattice index of the site on the mps we just updated
+
+    Outputs:
+
+    This function does not return anything. As suggested by the exclamation mark which is conventionally placed in its name (when
+    the given function mutates the input), it mutates the states vector.
+    """
 
     site = contraction(conj!(deepcopy(M)), (3,), W, (3,))
     site = contraction(site, (5,), M, (3,))
@@ -520,14 +628,32 @@ function update_states!(sweep_direction::Form, states, M, W, i)
         states[i] = contraction(site, (2,4,6), states[i+1], (1,2,3))
 
     end
-
-
-
-
-
 end
 
-function variational_ground_state_MPS(N::Int64, d::Int64, D::Int64, mpo::Vector, accuracy::Float64, max_sweeps::Int64)
+function variational_ground_state_MPS(N::Int64, d::Int64, D::Int64, mpo::Vector, accuracy::Float64, max_sweeps::Int64)::Tuple{ComplexF64, Vector{Array{ComplexF64}}, Int64}
+
+    """
+    This is the main function which implements the variational MPS ground state algorithm described in Schollwock section 6.3.
+        
+    Inputs:
+
+    N = number of lattice sites (Integer)
+
+    d = number of degrees of freedom on each site - eg d = 2 if we have only spin up, spin down (Integer)
+
+    D = bond dimension which controls the entanglement of the mps state (Integer)
+
+    mpo = The Hamiltonian we are investigating in the form of an mpo
+
+    accuracy = We are trying to find the mps that will give the smallest energy and we stop the search once the fractional change in energy is less than the accuracy (Float)
+    
+    max_sweeps = number of maximum sweeps we should perform if the desired accuracy is not reached and the algorithm does not stop because it reached the desired accuracy
+
+    Outputs:
+
+    E_optimal, mps, sweep_number = minimum energy we reached, mps that reached this minimum energy which approximates the ground state of the mpo Hamiltonian we gave as input, number of sweeps we performed when we stopped the algorithm
+
+    """
 
     mps = initialize_MPS(N, d, D)
     gauge_mps!(right, mps, true, N)
@@ -604,38 +730,28 @@ function variational_ground_state_MPS(N::Int64, d::Int64, D::Int64, mpo::Vector,
 
 end
 
-# TODO: Check that get_L_of_Heff and get_R_of_Heff work as expected and derive the identity MPO, 
-# write functions to update the vector they return after 1 update
+# # The command to generate the variational_MPS_algorithm.jl.mem file is:
+# # 
+# # julia --track-allocation=user variational_MPS_algorithm.jl
+# #
+# # Then you run the variational_MPS_algorithm.jl and then open the .mem file which will contain the number of memory allocations
 
-# N = 4
-# mpo = get_Ising_MPO(N,1.0,1.0,1.0)
-# mps = initialize_MPS(N,2,2)
-# gauge_mps!(left, mps, true, N)
-# R_vector, result = get_R_of_Heff(mps, mpo, 2, N)
-# display(R_vector)
+# function wrapper() # so as to not misallocate and focus on the function we want to probe
+# initialize_MPS(4,2,2) # force compilation
+# Profile.clear_malloc_data() # clear allocation
+# initialize_MPS(4,2,2) # run again without compilation
+# end
 
-# N = 5
-# d = 2
-# D = 2
-# mpo = get_Ising_MPO(N, 1.0, 1.0, 1.0)
-# mps = initialize_MPS(N, d, D)
-# gauge_mps!(left, mps, true, N)
-# R_vector, result_R = get_R_of_Heff(mps, mpo, 4, N)
-# L_vector, result_L = get_L_of_Heff(mps, mpo, 2)
-# contraction_00 = contraction(conj!(deepcopy(mps[3])), (3,), mpo[3], (3,)) # a1,a2,s ... b1,b2,s,s' -> a1,a2,b1,b2,s'
-# contraction_0 = contraction(contraction_00, (5,), mps[3], (3,)) # a1,a2,b1,b2,s' ... a1',a2',s' -> a1,a2,b1,b2,a1',a2'
-# contraction_1 = contraction(result_L, (4,5,6), contraction_0, (1,3,5)) # 1,1,1,a1,b1,a1' ... a1,a2,b1,b2,a1',a2' -> 1,1,1,a2,b2,a2'
-# contraction_2 = contraction(contraction_1, (4,5,6), result_R, (1,2,3)) # 1,1,1,a2,b2,a2' ... a2,b2,a2',1,1,1
-# display(contraction_2)
-# Heff = get_Heff(result_L, mpo[3], result_R)
-# display(isapprox(Heff, Heff')) true
-
+# wrapper()
 
 N = 4
 d = 2
 D = 2
 mpo = get_Ising_MPO(N, 1.0, 1.0, 0.01)
-acc = 10^(-8)
-max_sweeps = 100
+acc = 10^(-10)
+max_sweeps = 10
 E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
-display(E_optimal)
+println("Minimum energy: ", E_optimal)
+println("Number of sweeps performed: ", sweep_number)
+println("Below is the optimal MPS that minimized the energy:")
+display(mps)
