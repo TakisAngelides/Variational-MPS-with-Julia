@@ -173,9 +173,12 @@ function get_Ising_MPO(N::Int64, J::Float64, g_x::Float64, g_z::Float64)::Vector
 
     """
     Creates the 1D transverse and longitudinal applied magnetic field Ising model with open boundary conditions with the Hamiltonian 
-    operator H = sum_over_nearest_neighbours(J * Z_i * Z_j) + sum_over_all_sites((g_x * X_i) + (g_z * Z_i)). It stores the MPO as a 
-    vector of N elements, 1 element for each lattice site, and at site or in other words each element is a 4-tensor or in memory a 
-    4-array with the indices stored as shown below.
+    operator 
+    
+    H = sum_over_nearest_neighbours(J * Z_i * Z_j) + sum_over_all_sites((g_x * X_i) + (g_z * Z_i)). 
+    
+    It stores the MPO as a vector of N elements, 1 element for each lattice site, and at site or in other words each element is a 
+    4-tensor or in memory a 4-array with the indices stored as shown below.
 
           sigma_i                                              3
              |                                                 |
@@ -189,6 +192,8 @@ function get_Ising_MPO(N::Int64, J::Float64, g_x::Float64, g_z::Float64)::Vector
 
     Note 2: See notes for this function, including the derivation of the W1, WN and Wi, in Constructing Hamiltonian MPO note in goodnotes
     (which should be on my website).
+
+    Note 3: See equation (8) at https://arxiv.org/pdf/1012.0653.pdf.
 
     Inputs:
 
@@ -316,6 +321,127 @@ function get_identity_MPO(N::Int64, d::Int64)::Vector{Array{ComplexF64}}
     end
 
     return mpo
+
+end
+
+function get_spin_half_MPO(N::Int64, measure_axis::String)::Vector{Array{ComplexF64}}
+
+    """
+    Returns the MPO as a Vector of 4-tensors that represents the operator of total spin 1/2 of the lattice
+
+    O^j = sum_i (S^j_i) = sum_i (sigma^j_i/2) 
+    
+    where j = x,y,z depending on which axis we want to measure and i runs from 1 to N over lattice sites. 
+
+    Note 1: See my personal website documentation to see how the MPO representation is derived.
+
+    Inputs:
+
+    N = number of lattice sites (Integer)
+
+    measure_axis = which axis to measure the spin (String) takes values "x", "y" or "z"
+
+    Output:
+
+    mpo = vector where each element is a 4-tensor representing the operator as a W tensor
+    """
+
+    zero = [0.0 0.0; 0.0 0.0]
+    identity = [1.0 0.0;0.0 1.0]
+
+    if measure_axis == "x"
+        operator = [0.0 0.5;0.5 0.0] # sigma^x/2 - pauli x operator divided by 2
+    elseif measure_axis == "y"
+        operator = [0.0 -0.5im;0.5im 0.0] # sigma^y/2 - pauli y operator divided by 2
+    else 
+        operator = [0.5 0.0;0.0 -0.5] # sigma^z/2 - pauli z operator divided by 2
+    end
+
+    mpo = Vector{Array{ComplexF64}}(undef, N)
+
+    D = 2 # Bond dimension of MPO - this will be the dimension of the virtual/bond indices left and right of the tensor in a diagram
+    d = 2 # Physical dimension of MPO - this will be the dimension of the physical indices above and below the tensor in a diagram
+
+    # Tensor at site 1
+
+    mpo[1] = zeros(ComplexF64, 1,D,d,d)
+    mpo[1][1,1,:,:] = operator
+    mpo[1][1,2,:,:] = identity
+
+    # Tensor at site N
+
+    mpo[N] = zeros(ComplexF64, D,1,d,d)
+    mpo[N][1,1,:,:] = identity
+    mpo[N][2,1,:,:] = operator
+
+    # Tensor at sites 2 to N-1
+
+    tmp = zeros(ComplexF64, D,D,d,d)
+    tmp[1,1,:,:] = identity
+    tmp[1,2,:,:] = zero
+    tmp[2,1,:,:] = operator
+    tmp[2,2,:,:] = identity
+
+    for i in 2:N-1
+        mpo[i] = tmp
+    end
+
+    return mpo
+
+end
+
+function get_spin_half_expectation_value(N::Int64, mps::Vector{Array{ComplexF64}}, measure_axis::String)::ComplexF64
+
+    """
+    Computes the expectation value of the operator
+
+    O^j = sum_i (S^j_i) = sum_i (sigma^j_i/2)
+
+    which gives the total magnetisation along a specific axis j which can be x, y or z and i runs over all sites from 1 to N.
+
+    Inputs:
+
+    N = number of lattice sites (Integer)
+
+    mps = the mps which we will use to calculate <mps|operator|mps> (Vector of 3-tensors)
+
+    measure_axis = which axis to measure the spin (String) takes values "x", "y" or "z"
+
+    Outputs:
+
+    result = total magnetisation of spin 1/2 along a given x, y or z axis (ComplexF64)
+    """
+
+    # If we want to measure spin in the x direction we get the MPO operator = sum_i sigma^x_i/2 or y or z equivalently
+
+    if measure_axis == "x"
+        mpo = get_spin_half_MPO(N, "x")
+    elseif measure_axis == "y"
+        mpo = get_spin_half_MPO(N, "y")
+    else
+        mpo = get_spin_half_MPO(N, "z")
+    end
+
+    # Contracts the triple of <mps|mpo|mps> at site 1, then contracts this triple with a dummy 1x1x1 tensor of value 1
+    # which will get rid of the trivial indices of the first triple at site 1. The trivial indices are the ones labelled 1,
+    # see for example Schollwock equation (192) first bracket.
+
+    triple_1 = contraction(conj!(deepcopy(mps[1])), (3,), mpo[1], (3,))
+    triple_1 = contraction(triple_1, (5,), mps[1], (3,))
+    dummy_tensor = ones(ComplexF64, 1,1,1)
+    result = contraction(dummy_tensor, (1,2,3), triple_1, (1,3,5))
+
+    # Now we compute the triple <mps|mpo|mps> at site i and contract it with the triple at site i-1 which we named result before
+
+    for i in 2:N
+    
+        triple_i = contraction(conj!(deepcopy(mps[i])), (3,), mpo[i], (3,))
+        triple_i = contraction(triple_i, (5,), mps[i], (3,))
+        result = contraction(result, (1,2,3), triple_i, (1,3,5))
+
+    end
+
+    return result[1,1,1] # expectation value of total magnetisation with respect to a give x,y or z axis which was a 1x1x1 tensor hence the [1,1,1] index to get a ComplexF64
 
 end
 
@@ -520,7 +646,7 @@ function initialize_L_R_states(mps::Vector{Array{ComplexF64}}, mpo::Vector{Array
 
         states[i] = contraction(conj!(deepcopy(mps[i])), (3,), mpo[i], (3,))
         states[i] = contraction(states[i], (5,), mps[i], (3,))
-        states[i] = contraction(states[i], (2,4,6), states[i+1], (1,2,3))
+        states[i] = contraction(states[i], (2,4,6), states[i+1], (1,2,3)) # Remember for loop index is going downwards so i+1 was the previous result in the for loop
 
     end
 
@@ -730,6 +856,7 @@ function variational_ground_state_MPS(N::Int64, d::Int64, D::Int64, mpo::Vector,
 
 end
 
+
 # # The command to generate the variational_MPS_algorithm.jl.mem file is:
 # # 
 # # julia --track-allocation=user variational_MPS_algorithm.jl
@@ -744,14 +871,18 @@ end
 
 # wrapper()
 
+@time begin
 N = 4
 d = 2
 D = 2
-mpo = get_Ising_MPO(N, 1.0, 1.0, 0.01)
+mpo = get_Ising_MPO(N, -1.0, 1.0, 0.1)
 acc = 10^(-10)
 max_sweeps = 10
 E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
 println("Minimum energy: ", E_optimal)
 println("Number of sweeps performed: ", sweep_number)
-println("Below is the optimal MPS that minimized the energy:")
-display(mps)
+# println("Below is the optimal MPS that minimized the energy:")
+# display(mps)
+total_spin = get_spin_half_expectation_value(N, mps, "z")
+display(total_spin/N)
+end
