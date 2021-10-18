@@ -10,7 +10,7 @@ and
 
 **Description of functions in variational_ground_state_MPS.pdf**
 
-to understand which function calls which and how the variables created are passed around the program. These two pdf documents should be read at the same time.
+to understand which function calls which and how the variables created are passed around the program in the **variational_MPS_algorithm.jl** file. These two pdf documents should be read at the same time.
 
 Current vesion can: perform the variational ground state MPS algorithm and get the ground state energy and ground state MPS for a given input Hamiltonian. It can also measure the total spin along a given x,y or z axis.
 
