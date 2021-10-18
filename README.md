@@ -4,7 +4,7 @@ Under construction!
 
 Read first:
 
-**functions_graph_variational_ground_state_MPS.pdf** and **Description of functions in variational_ground_state_MPS.pdf**
+**Graph of functions in variational_MPS_algorithm.pdf** and **Description of functions in variational_MPS_algorithm.pdf**
 
 to understand which function calls which and how the variables created are passed around the program in the **variational_MPS_algorithm.jl** file. These two pdf documents should be read at the same time.
 
