@@ -1,12 +1,12 @@
 using Profile
 using LinearAlgebra
 using Arpack
+using BenchmarkTools
 
 @enum Form begin
     left
     right
 end
-
 
 function initialize_MPS(N::Int64, d::Int64, D::Int64)::Vector{Array{ComplexF64}}
 
@@ -41,11 +41,20 @@ function initialize_MPS(N::Int64, d::Int64, D::Int64)::Vector{Array{ComplexF64}}
 
     mps = Vector{Array{ComplexF64}}(undef, N)
     
-    mps[1] = rand(ComplexF64, 1, D, d)
+    # Tensor at site 1
+
+    mps[1] = rand(ComplexF64, 1, D, d) # random 3-tensor with index dimensions 1, D and d
+
+    # Tensor at site N
+
     mps[N] = rand(ComplexF64, D, 1, d)
+
+    # Tensors at site 2 to N-1
+
     for i in 2:N-1
         mps[i] = rand(ComplexF64, D, D, d)
     end
+    
     return mps
 
 end
@@ -190,8 +199,7 @@ function get_Ising_MPO(N::Int64, J::Float64, g_x::Float64, g_z::Float64)::Vector
     and the last two are the physical indices that would connect to the physical indices of the bra (above MPO) and ket (below MPO)
     respectively.
 
-    Note 2: See notes for this function, including the derivation of the W1, WN and Wi, in Constructing Hamiltonian MPO note in goodnotes
-    (which should be on my website).
+    Note 2: See notes for this function, including the derivation of the W1, WN and Wi, in Constructing Hamiltonian MPO note on my website.
 
     Note 3: See equation (8) at https://arxiv.org/pdf/1012.0653.pdf.
 
@@ -288,6 +296,8 @@ function get_identity_MPO(N::Int64, d::Int64)::Vector{Array{ComplexF64}}
     """
     Creates the identity MPO for a lattice of N sites with d degrees of freedom per site.
 
+    Note 1: See notes for this function on my personal website on how to derived the MPO representation.
+
     Inputs:
 
     N = number of lattice sites (Integer)
@@ -307,10 +317,6 @@ function get_identity_MPO(N::Int64, d::Int64)::Vector{Array{ComplexF64}}
 
     In other words each tensor on each site has indices W_alpha,beta,sigma_i,sigma_i_dash
     """
-
-    # See get_identity_MPO notes on personal website 
-
-    # TODO: add goodnotes to personal website
 
     mpo = Vector{Array{ComplexF64}}(undef, N)
 
@@ -569,6 +575,8 @@ function inner_product_MPS(mps_1::Vector{Array{ComplexF64}}, mps_2::Vector{Array
 
     Note 1: See Schollwock equation (95)
 
+    Note 2: See my personal website for notes on this function and how the contractions are done in a specific order for efficiency.
+
     Inputs:
 
     mps_1 = The bra MPS state of the inner product (Vector)
@@ -593,9 +601,6 @@ function inner_product_MPS(mps_1::Vector{Array{ComplexF64}}, mps_2::Vector{Array
     result = contraction(conj!(deepcopy(mps_1[1])), (1, 3), mps_2[1], (1, 3)) # The reason we deepcopy is because mps_1 might point to mps_2 and conj! mutates the input as the ! suggests
 
     for i in 2:N
-        
-        # TODO: put the following goodnotes on my website
-        # See inner_product_MPS function in Code Notes in goodnotes to follow the next two lines (should be on my website)
 
         result = contraction(result, (2,), mps_2[i], (1,))
 
@@ -856,12 +861,13 @@ function variational_ground_state_MPS(N::Int64, d::Int64, D::Int64, mpo::Vector,
 
 end
 
+# ----------------------------------------------------------------------------------------------------------------------------------
 
-# # The command to generate the variational_MPS_algorithm.jl.mem file is:
-# # 
-# # julia --track-allocation=user variational_MPS_algorithm.jl
-# #
-# # Then you run the variational_MPS_algorithm.jl and then open the .mem file which will contain the number of memory allocations
+# The command to generate the variational_MPS_algorithm.jl.mem file is:
+# 
+# julia --track-allocation=user variational_MPS_algorithm.jl
+#
+# Then you run the variational_MPS_algorithm.jl and then open the .mem file which will contain the number of memory allocations
 
 # function wrapper() # so as to not misallocate and focus on the function we want to probe
 # initialize_MPS(4,2,2) # force compilation
@@ -871,18 +877,35 @@ end
 
 # wrapper()
 
-@time begin
-N = 4
-d = 2
-D = 2
-mpo = get_Ising_MPO(N, -1.0, 1.0, 0.1)
-acc = 10^(-10)
-max_sweeps = 10
-E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
-println("Minimum energy: ", E_optimal)
-println("Number of sweeps performed: ", sweep_number)
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+# function wrap()
+#     N = 4
+#     d = 2
+#     D = 2
+#     mpo = get_Ising_MPO(N, 1.0, 1.0, 0.1)
+#     acc = 10^(-10)
+#     max_sweeps = 10
+#     E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
+# end
+
+# @benchmark wrap()
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+# N = 4
+# d = 2
+# D = 2
+# mpo = get_Ising_MPO(N, 1.0, 1.0, 0.1)
+# acc = 10^(-10)
+# max_sweeps = 10
+# E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
+# println("Minimum energy: ", E_optimal)
+# println("Number of sweeps performed: ", sweep_number)
 # println("Below is the optimal MPS that minimized the energy:")
 # display(mps)
-total_spin = get_spin_half_expectation_value(N, mps, "z")
-display(total_spin/N)
-end
+# total_spin = get_spin_half_expectation_value(N, mps, "z")
+# display(total_spin/N)
+# display(inner_product_MPS(mps, mps))
+
+# ----------------------------------------------------------------------------------------------------------------------------------
