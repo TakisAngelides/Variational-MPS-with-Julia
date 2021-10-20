@@ -2,6 +2,7 @@ using Profile
 using LinearAlgebra
 using Arpack
 using BenchmarkTools
+using Plots
 
 @enum Form begin
     left
@@ -896,7 +897,10 @@ end
 # N = 4
 # d = 2
 # D = 2
-# mpo = get_Ising_MPO(N, 1.0, 1.0, 0.1)
+# J = 1.0
+# g_x = 0.0
+# g_z = 1.5
+# mpo = get_Ising_MPO(N, J, g_x, g_z)
 # acc = 10^(-10)
 # max_sweeps = 10
 # E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
@@ -906,6 +910,40 @@ end
 # display(mps)
 # total_spin = get_spin_half_expectation_value(N, mps, "z")
 # display(total_spin/N)
-# display(inner_product_MPS(mps, mps))
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+average_spin_list = []
+ground_state_energy_list = []
+N_list = [4]
+J_list = [1.0]
+g_x_list = [0.0]
+g_z_list = LinRange(0.0, 2.0, 10)
+
+for N in [4]
+    for d in [2]
+        for D in [2]
+            for J in [1.0]
+                for g_x in [0.0]
+                    for g_z in [1.5]
+                    
+                        mpo = get_Ising_MPO(N, J, g_x, g_z)
+                        acc = 10^(-10)
+                        max_sweeps = 10
+                        E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
+                        total_spin = get_spin_half_expectation_value(N, mps, "z")
+                        average_spin = total_spin/N
+                        append!(average_spin_list, real(average_spin))
+                        append!(ground_state_energy_list, E_optimal)
+
+                    end
+                end
+            end 
+        end
+    end
+end
+
+plot(g_z_list, average_spin_list)
+
 
 # ----------------------------------------------------------------------------------------------------------------------------------
