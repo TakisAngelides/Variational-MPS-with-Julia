@@ -867,12 +867,12 @@ end
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-N = 4
+N = 2
 d = 2
 D = 2
-J = 1.0
+J = -1.0
 g_x = 0.0
-g_z = 1.5
+g_z = 0.1
 mpo = get_Ising_MPO(N, J, g_x, g_z)
 acc = 10^(-10)
 max_sweeps = 10
@@ -880,9 +880,13 @@ E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, m
 println("Minimum energy: ", E_optimal)
 println("Number of sweeps performed: ", sweep_number)
 println("Below is the optimal MPS that minimized the energy:")
-display(mps)
+display(mps[1][1,:,:])
+display(mps[2][:,1,:])
 total_spin = get_spin_half_expectation_value(N, mps, "z")
-display(total_spin/N)
+println("Magnetisation per site: ", total_spin/N)
+psi = contraction(mps[1], (2,), mps[2], (1,))
+# psi = contraction(zeros(ComplexF64, 1, 1), (1,2), psi, (1,3))
+display(psi[1,:,1,:])
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 
