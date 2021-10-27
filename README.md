@@ -17,3 +17,5 @@ The Benchmark Timer shown in the picture of the file **Benchmark Timer for varia
 This repository is for my project at the Cyprus Institute with Dr Stefan Kuhn. The aim is to build MPS Julia code for the variational MPS algorithm that usually
 gets the ground state of the input Hamiltonian. Then we will apply it to the 1D transverse/longitudinal Ising model and finally investigate confinement in the presence
 of a topological theta term in the Schwinger model.
+
+Notes and documentation for this project can be found in the file 'Tensor Networks, DMRG and the quantum 1D Ising model' at https://takisangelides.wixsite.com/personal/academic-projects.
