@@ -220,12 +220,12 @@ function get_Ising_MPO(N::Int64, J::Float64, g_x::Float64, g_z::Float64)::Vector
     d = 2 # Physical dimension for the 1D transverse and longitudinal field Ising model is 2
 
     # zero matrix, identity matrix and Pauli matrices X and Y - notice this implicitly assumes d = 2 for our degrees of freedom on a site
-    zero = [0 0; 0 0]
-    I = [1 0; 0 1]
-    X = [0 1; 1 0]
-    Z = [1 0; 0 -1]
+    zero = [0.0 0.0; 0.0 0.0]
+    I = [1.0 0.0; 0.0 1.0]
+    X = [0.0 1.0; 1.0 0.0]
+    Z = [1.0 0.0; 0.0 -1.0]
 
-    mpo = Vector{Array{ComplexF64}}(undef, N) # An MPO is stored as a vector and each element of the vector stores a 
+    mpo = Vector{Array{ComplexF64}}(undef, N) # An MPO is stored as a vector and each element of the vector stores a 4-tensor
     
     # mpo tensor at site 1
     
@@ -330,11 +330,11 @@ function get_spin_half_MPO(N::Int64, measure_axis::String)::Vector{Array{Complex
     identity = [1.0 0.0;0.0 1.0]
 
     if measure_axis == "x"
-        operator = [0.0 0.5;0.5 0.0] # sigma^x/2 - pauli x operator divided by 2
+        operator = [0.0 0.5;0.5 0.0] # sigma_x/2 - pauli x operator divided by 2
     elseif measure_axis == "y"
-        operator = [0.0 -0.5im;0.5im 0.0] # sigma^y/2 - pauli y operator divided by 2
-    else 
-        operator = [0.5 0.0;0.0 -0.5] # sigma^z/2 - pauli z operator divided by 2
+        operator = [0.0 -0.5im;0.5im 0.0] # sigma_y/2 - pauli y operator divided by 2
+    elseif measure_axis == "z"
+        operator = [0.5 0.0;0.0 -0.5] # sigma_z/2 - pauli z operator divided by 2
     end
 
     mpo = Vector{Array{ComplexF64}}(undef, N)
@@ -342,19 +342,19 @@ function get_spin_half_MPO(N::Int64, measure_axis::String)::Vector{Array{Complex
     D = 2 # Bond dimension of MPO - this will be the dimension of the virtual/bond indices left and right of the tensor in a diagram
     d = 2 # Physical dimension of MPO - this will be the dimension of the physical indices above and below the tensor in a diagram
 
-    # Tensor at site 1
+    # # Tensor at site 1
 
     mpo[1] = zeros(ComplexF64, 1,D,d,d)
     mpo[1][1,1,:,:] = operator
     mpo[1][1,2,:,:] = identity
 
-    # Tensor at site N
+    # # Tensor at site N
 
     mpo[N] = zeros(ComplexF64, D,1,d,d)
     mpo[N][1,1,:,:] = identity
     mpo[N][2,1,:,:] = operator
 
-    # Tensor at sites 2 to N-1
+    # # Tensor at sites 2 to N-1
 
     tmp = zeros(ComplexF64, D,D,d,d)
     tmp[1,1,:,:] = identity
@@ -511,11 +511,11 @@ function gauge_mps!(form::Form, mps::Vector{Array{ComplexF64}}, normalized::Bool
         for i in N:-1:2 # We start from the right most site and move to the left
 
             US, mps[i] = gauge_site(right, M_tilde) # US will be multiplied to the M on the left
-            M_tilde =  contraction(mps[i-1], (2,), US, (1,)) # M_tilde_(a_i-2)(sigma_i-1)(s_i-1)
+            M_tilde = contraction(mps[i-1], (2,), US, (1,)) # M_tilde_(a_i-2)(sigma_i-1)(s_i-1)
             M_tilde = permutedims(M_tilde, (1,3,2)) # Put the physical index to the right most place M_tilde_(a_i-2)(sigma_i-1)(s_i-1) -> M_tilde_(a_i-2)(s_i-1)(sigma_i-1)
             if i == 2
                 if normalized # If we require the state to be normalized then we gauge even the first site to be a B tensor so that the whole contraction <psi|psi> collapses to the identity
-                    _, mps[1] = gauge_site(right, M_tilde) # The placeholder _ for the value of US tells us that we are discarding that number and so the state is normalized
+                    _, mps[1] = gauge_site(right, M_tilde) # The placeholder _ for the value of US tells us that we are discarding that number and so the state is normalized just like we would divide psi by sqrt(a) when <psi|psi> = a
                 else
                     mps[1] = M_tilde # Here we don't enforce a normalization so we dont have to gauge the first site we will just need to contract it with its complex conjugate to get the value for <psi|psi>
                 end
@@ -573,7 +573,7 @@ function inner_product_MPS(mps_1::Vector{Array{ComplexF64}}, mps_2::Vector{Array
     # trivial and set to 1. It also contracts the physical indices of the two aforementioned matrices which gives a new non-trivial result.
 
     result = contraction(conj!(deepcopy(mps_1[1])), (1, 3), mps_2[1], (1, 3)) # The reason we deepcopy is because mps_1 might point to mps_2 and conj! mutates the input as the ! suggests
-
+    
     for i in 2:N
 
         result = contraction(result, (2,), mps_2[i], (1,))
@@ -686,7 +686,7 @@ function get_updated_site(L::Array{ComplexF64}, W::Array{ComplexF64}, R::Array{C
     """
 
     Heff, dimensions = get_Heff(L, W, R)
-    E, M = eigs(Heff, nev=1, which=:SR) # nev = 1 => it will return only 1 number of eigenvalues, SR => compute eigenvalues which have the smallest real part (ie the ground state energy and upwards depending on nev)
+    E, M = eigs(Heff, nev=1, which=:SR) # nev = 1 => it will return only 1 number of eigenvalues, SR => compute eigenvalues which have the smallest real part (ie the ground state energy and upwards depending on nev), also note M'*M = 1.0+0.0im
     M = reshape(M, (dimensions[1], dimensions[2], dimensions[3])) # M is reshaped in the form sigma_i, a_i-1, a_i
     M = permutedims(M, (2,3,1)) # M is permuted into the form a_i-1, a_i, sigma_i
 
@@ -790,22 +790,22 @@ function variational_ground_state_MPS(N::Int64, d::Int64, D::Int64, mpo::Vector{
 
     """
 
-    mps = initialize_MPS(N, d, D)
-    gauge_mps!(right, mps, true, N)
+    mps = initialize_MPS(N, d, D) # Initialize a random mps
+    gauge_mps!(right, mps, true, N) # Put it in right canonical form and normalize it
 
     # This are the partial contractions of the initial mps configuration which is contains all B tensors, 
     # it has length N+1 where the first and last elements are 1x1x1 tensors of value 1. The states vector will thus be of the form
     # 1RRRR1 for N = 5.
 
-    states = initialize_L_R_states(mps, mpo, N) 
-    E_initial = 10^(-5)
-    E_optimal = 0
-    sweep_number = 0
-    US = 0
+    states = initialize_L_R_states(mps, mpo, N) # Holds partial contractions needed for each site's H_eff
+    E_initial = 10^(-5) # Will hold the ground state energy approximation of the previous full sweep
+    E_optimal = 0 # Will hold the final best ground state energy approximation once the algorithm is finished
+    sweep_number = 0 # Counts the number of full sweeps performed
+    US = 0 # Will hold the residual matrices from SVD when we put a newly updated tensor in right canonical form while sweeping from right to left
 
     while(true)
         
-        E = 0
+        E = 0 # Will hold the ground state energy apprxoimation right after a full sweep finishes
 
         # From left to right sweep (right moving sweep or right sweep)
 
@@ -820,27 +820,37 @@ function variational_ground_state_MPS(N::Int64, d::Int64, D::Int64, mpo::Vector{
 
         end
 
-        for i in N:-1:2 # Its down to 2 here because the right moving sweep will start from 1
+        for i in N:-1:2 # Lower limit is 2 here because the right moving sweep will start from 1
 
             L = states[i]
             W = mpo[i]
             R = states[i+1]
             M, E = get_updated_site(L, W, R)
-            US, mps[i] = gauge_site(right, M)
+            US, mps[i] = gauge_site(right, M) # We only use US after this for loop to restore normalization to the mps state
             update_states!(left, states, mps[i], W, i)
 
         end
-
+        
         fractional_energy_change = abs((E - E_initial)/E_initial)
 
         if fractional_energy_change < accuracy
 
             E_optimal = E
             
+            # To restore the normalization of the mps
+
+            # We start with a normalized mps and each time we update a tensor we replace it with a normalized one such that the mps 
+            # normalization is maintained. The fact that we discard residual matrices from the SVD that put the updated tensors into 
+            # a particular gauge changes the mps and thus destroys its normalization. However these residual matrices would have been 
+            # multiplied on the next site which is about to get updated next and replaced with a normalized tensor, 
+            # restoring theoverall mps normalization. Just as we are about to stop sweeping, we need to multiply onto the tensor 
+            # on site 1 the lastresidual matrices from gauging site 2 so as to not change the mps, 
+            # maintaining in this way its normalization.
+
             mps[1] = contraction(mps[1], (2,), US, (1,))
             mps[1] = permutedims(mps[1], (1,3,2))
 
-            println("Desired accuracy reached.")
+            # println("Desired accuracy reached.")
 
             break
         
@@ -897,16 +907,17 @@ end
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-# N = 2
-# d = 2
-# D = 2
-# J = -1.0
-# g_x = 0.0
-# g_z = 0.1
-# mpo = get_Ising_MPO(N, J, g_x, g_z)
-# acc = 10^(-10)
-# max_sweeps = 10
-# E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
+N = 4
+d = 2
+D = 2
+J = -1.0
+g_x = 0.5
+g_z = -0.000001
+mpo = get_Ising_MPO(N, J, g_x, g_z)
+acc = 10^(-10)
+max_sweeps = 10
+E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
+# println(inner_product_MPS(mps, mps))
 # println("Minimum energy: ", E_optimal)
 # println("Number of sweeps performed: ", sweep_number)
 # println("Below is the optimal MPS that minimized the energy:")
@@ -914,18 +925,16 @@ end
 # display(mps[2][:,1,:])
 # total_spin = get_spin_half_expectation_value(N, mps, "z")
 # println("Magnetisation per site: ", total_spin/N)
-# psi = contraction(mps[1], (2,), mps[2], (1,))
-# # psi = contraction(zeros(ComplexF64, 1, 1), (1,2), psi, (1,3))
-# display(psi[1,:,1,:])
+# display(quantum_state_coefficients(mps, N))
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 
 # N_list = [4]
 # d_list = [2]
 # D_list = [2]
-# J_list = LinRange(1.0, 2.0,100)
-# g_x_list = [0.0]
-# g_z_list = [1.0]
+# J_list = [-1.0]
+# g_x_list = LinRange(0.2, 2.0, 100)
+# g_z_list = [-0.1]
 # average_spin_list = []
 # ground_state_energy_list = []
 
@@ -936,14 +945,14 @@ end
 #                 for g_x in g_x_list
 #                     for g_z in g_z_list
                     
-#                         mpo = get_Ising_MPO(N, J, g_x, g_z)
-#                         acc = 10^(-10)
-#                         max_sweeps = 10
-#                         E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
-#                         total_spin = get_spin_half_expectation_value(N, mps, "z")
-#                         average_spin = total_spin/N
+#                         mpo_1 = get_Ising_MPO(N, J, g_x, g_z)
+#                         acc_1 = 10^(-10)
+#                         max_sweeps_1 = 10
+#                         E_optimal_1, mps_1, sweep_number_1 = variational_ground_state_MPS(N, d, D, mpo_1, acc_1, max_sweeps_1)
+#                         total_spin_1 = get_spin_half_expectation_value(N, mps_1, "z")
+#                         average_spin = total_spin_1/N
 #                         append!(average_spin_list, real(average_spin))
-#                         append!(ground_state_energy_list, E_optimal)
+#                         append!(ground_state_energy_list, E_optimal_1)
 
 #                     end
 #                 end
@@ -952,12 +961,10 @@ end
 #     end
 # end
 
-# N, d, D, J, g_x = 4,2,2,1.0,0.0
-# title_str = "N = $N, d = $d, D = $D, J = $J, g_x = $g_x"
-# plot(g_z_list, average_spin_list, label = "Spin along z per site", title = latexstring(title_str), titlefontsize = 12)
-# xlabel!(L"g_z")
-# ylabel!("Spin along z per site")
-
-# plot(J_list, average_spin_list)
+# title_str = "N = 4, d = 2, D = 2, J = -1.0, g_z = -0.1"
+# plot(g_x_list, average_spin_list, legend = false, title = latexstring(title_str), titlefontsize = 12) # label = "Magnetisation per site along z-axis"
+# xlabel!(L"g_x")
+# ylabel!("Magnetisation per site along z-axis")
+# # savefig("quantum_phase_transition.pdf")
 
 # ----------------------------------------------------------------------------------------------------------------------------------
