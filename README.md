@@ -1,7 +1,5 @@
 # Variational-MPS-with-Julia
 
-Under construction!
-
 Read first:
 
 **Graph of functions in variational_MPS_algorithm.pdf** and **Description of functions in variational_MPS_algorithm.pdf**
