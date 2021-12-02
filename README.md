@@ -8,7 +8,8 @@ to understand which function calls which and how the variables created are passe
 
 Current vesion can: 
 
-perform the variational ground state MPS algorithm and get the ground state energy and ground state MPS for a given input Hamiltonian, using the file **variational_MPS_algorithm.jl**. It can also measure the total spin along a given x,y or z axis.
+perform the variational ground state MPS algorithm and get the ground state energy and ground state MPS for a given input Hamiltonian, using the file **variational_MPS_algorithm.jl**. It can also measure the total spin along a given x,y or z axis. It can also find the ground state energy for the Schwinger Hamiltonian with
+Wilson fermions in the presence of a theta term and compare it to the energy that one can find from exact diagonalization of the Hamiltonian as a big sparse matrix.
 
 The Benchmark Timer shown in the picture of the file **Benchmark Timer for variational_ground_state_MPS function.JPG** has input N = 4, D = 2, d = 2 for number of lattice sites, bond dimension and physical dimension respectively, computed on my humble machine Dell XPS 13.
 
