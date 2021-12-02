@@ -4,6 +4,7 @@ using Arpack
 using BenchmarkTools
 using Plots
 using LaTeXStrings
+using Test
 
 @enum Form begin
     left
@@ -370,6 +371,255 @@ function get_spin_half_MPO(N::Int64, measure_axis::String)::Vector{Array{Complex
 
 end
 
+function get_Schwinger_Wilson_MPO(N::Int64, l_0::Float64, x::Float64, lambda::Float64, m_g_ratio::Float64)::Vector{Array{ComplexF64}}
+
+    """
+    Builds the MPO for the 1+1 Schwinger model Hamiltonian using Wilson fermions, Gauss' law and a Jordan Wigner transformation to 
+    put the Hamiltonian in full spin formulation. For the derivation see here: https://takisangelides.wixsite.com/personal/notes-sharing
+
+    Inputs: 
+
+    N = number of lattice sites (Integer)
+
+    l_0 = background electric field (float)
+
+    x = 1/(a^2 * g^2) where a is lattice spacing and g is coupling constant (float)
+
+    lambda = penalty term's lagrange multiplier (float)
+
+    m_g_ratio = mass of fermion divided by coupling constant = m/g (float)
+
+    Outputs:
+
+    mpo = MPO of Schwinger model Hamiltonian using Wilson fermions (Vector of tensors of complex numbers)
+
+    """
+
+    A = -2*1im*(sqrt(x)*m_g_ratio + x)
+    B = -2*1im*x
+    C = (N-1)*l_0^2 + lambda*N/2 + N*(N-1)/4
+    D = 7
+    d = 2
+
+    I = [1 0; 0 1]
+    Z = [1 0; 0 -1]
+    PLUS = [0 1; 0 0]
+    MINUS = [0 0; 1 0]
+
+    mpo = Vector{Array{ComplexF64}}(undef, 2*N) # An MPO is stored as a vector and each element of the vector stores a 4-tensor
+
+    for n in 1:2N
+    
+        if n % 2 == 0
+        
+            if n == 2*N
+
+                mpo[n] = zeros((D, 1, d, d))
+                mpo[n][1,1,:,:] = I
+                mpo[n][2,1,:,:] = MINUS
+                mpo[n][3,1,:,:] = PLUS
+                mpo[n][6,1,:,:] = 0.5*(N - n/2 + lambda).*Z
+                mpo[n][7,1,:,:] = C/(2*N).*I + l_0*(N-n/2).*Z
+
+            else
+
+                mpo[n] = zeros((D, D, d, d))
+                mpo[n][1,1,:,:] = I
+                mpo[n][2,1,:,:] = MINUS
+                mpo[n][3,1,:,:] = PLUS
+                mpo[n][6,1,:,:] = 0.5*(N - n/2 + lambda).*Z
+                mpo[n][7,1,:,:] = C/(2*N).*I + l_0*(N-n/2).*Z
+                mpo[n][5,2,:,:] = Z
+                mpo[n][4,3,:,:] = Z
+                mpo[n][6,6,:,:] = I
+                mpo[n][7,6,:,:] = Z
+                mpo[n][7,7,:,:] = I
+
+            end
+        else
+
+            if n == 1
+                
+                mpo[n] = zeros((1, D, d, d))
+                mpo[n][1,1,:,:] = C/(2*N).*I + l_0*(N - n/2 - 1/2).*Z
+                mpo[n][1,2,:,:] = A.*PLUS
+                mpo[n][1,3,:,:] = -A.*MINUS
+                mpo[n][1,4,:,:] = B.*MINUS
+                mpo[n][1,5,:,:] = -B.*PLUS
+                mpo[n][1,6,:,:] = Z
+                mpo[n][1,7,:,:] = I
+            
+            else
+
+                mpo[n] = zeros((D, D, d, d))
+                mpo[n][7,1,:,:] = C/(2*N).*I + l_0*(N - n/2 - 1/2).*Z
+                mpo[n][7,2,:,:] = A.*PLUS
+                mpo[n][7,3,:,:] = -A.*MINUS
+                mpo[n][7,4,:,:] = B.*MINUS
+                mpo[n][7,5,:,:] = -B.*PLUS
+                mpo[n][7,6,:,:] = Z
+                mpo[n][7,7,:,:] = I
+                mpo[n][6,6,:,:] = I
+                mpo[n][1,1,:,:] = I
+                mpo[n][2,2,:,:] = Z
+                mpo[n][3,3,:,:] = Z
+                mpo[n][6,1,:,:] = 0.5*(N - n/2 - 1/2 + lambda).*Z
+
+            end
+
+        end
+    
+    end
+    
+    return mpo
+
+end
+
+function operator_to_sparse_matrix(operator, idx::Int64, N::Int64)
+
+    result = ones(1)
+    I = [1 0; 0 1]
+    
+    for i in 1:N
+        if i == idx
+            result = kron(result, operator)
+        else
+            result = kron(result, I)
+        end
+    end
+
+    return result
+
+end
+
+function get_Schwinger_hamiltonian_matrix(N::Int64, l_0::Float64, x::Float64, lambda::Float64, m_g_ratio::Float64)
+
+    A = -2*1im*(sqrt(x)*m_g_ratio + x)
+    B = -2*1im*x
+    C = (N-1)*l_0^2 + lambda*N/2 + N*(N-1)/4
+
+    Z = [1 0; 0 -1]
+    PLUS = [0 1; 0 0]
+    MINUS = [0 0; 1 0]
+
+    result = zeros((2^(2*N), 2^(2*N)))
+
+    for n in 1:N
+
+        result += A.*(operator_to_sparse_matrix(PLUS, 2*n-1, 2*N)*operator_to_sparse_matrix(MINUS, 2*n, 2*N))
+        result += - A.*(operator_to_sparse_matrix(MINUS, 2*n-1, 2*N)*operator_to_sparse_matrix(PLUS, 2*n, 2*N))
+
+    end
+
+    for n in 1:N-1
+    
+        result += B.*(operator_to_sparse_matrix(MINUS, 2*n-1, 2*N)*operator_to_sparse_matrix(Z, 2*n, 2*N)operator_to_sparse_matrix(Z, 2*n+1, 2*N)operator_to_sparse_matrix(PLUS, 2*n+2, 2*N))
+        result += -B.*(operator_to_sparse_matrix(PLUS, 2*n-1, 2*N)*operator_to_sparse_matrix(Z, 2*n, 2*N)operator_to_sparse_matrix(Z, 2*n+1, 2*N)operator_to_sparse_matrix(MINUS, 2*n+2, 2*N))
+    
+    end
+
+    for k in 1:N-1
+
+        result += (l_0*(N-k)).*(operator_to_sparse_matrix(Z,2*k-1,2*N) + operator_to_sparse_matrix(Z,2*k,2*N))
+
+    end
+
+    for k in 1:N-1
+        for q in k+1:N
+        
+            result += (0.5*(N-q+lambda)).*(operator_to_sparse_matrix(Z,2*k-1,2*N)*operator_to_sparse_matrix(Z,2*q-1,2*N)+operator_to_sparse_matrix(Z,2*k-1,2*N)*operator_to_sparse_matrix(Z,2*q,2*N)+operator_to_sparse_matrix(Z,2*k,2*N)*operator_to_sparse_matrix(Z,2*q-1,2*N)+operator_to_sparse_matrix(Z,2*k,2*N)*operator_to_sparse_matrix(Z,2*q,2*N))
+
+        end
+    end
+
+    for k in 1:N
+    
+        result = result + (0.5*(N-k+lambda)).*(operator_to_sparse_matrix(Z,2*k-1,2*N)*operator_to_sparse_matrix(Z,2*k,2*N))
+    
+    end
+
+    result += C.*diagm(ones(2^(2*N)))
+
+    return result
+
+end
+
+function mpo_to_matrix(mpo::Vector{Array{ComplexF64}})
+    """
+    Converts an MPO to a matrix by contracting the bond links and reshaping into (sigma_1...sigma_N),(sigma'_1...sigma'_N)
+    
+    Input:
+
+    mpo = the mpo to be converted to a matrix (Vector of arrays of complex numbers)
+
+    Output:
+
+    result = the matrix with indices (sigma_1...sigma_N),(sigma'_1...sigma'_N) 
+    """
+
+    N = length(mpo)
+
+    idx = 2
+
+    result = contraction(mpo[1], (idx,), mpo[2], (1,))
+
+    for i in 3:N
+        
+        idx = idx + 2
+        result = contraction(result, (idx,), mpo[i], (1,))
+
+    end
+        
+    result = contraction(result, (length(size(result))-2,), ones(1), (1,))
+    result = contraction(result, (1,), ones(1), (1,))
+
+    odd = 1:2:2*N-1
+    even = 2:2:2*N
+
+    result = permutedims(result, (odd..., even...))
+
+    dims = size(result)
+    total_dim = dims[1:N]
+    total_dim_dash = dims[N+1:2*N]
+
+    result = reshape(result, (prod(total_dim), prod(total_dim_dash)))
+
+    return result
+end
+
+function act_mpo_on_mps(mpo::Vector{Array{ComplexF64}}, mps::Vector{Array{ComplexF64}})::Vector{Array{ComplexF64}}
+
+    """
+    Act with an mpo on an mps to produce a new mps with increased bond dimension.
+
+    Inputs:
+
+    mpo = the mpo to act on the mps (Vector of Arrays)
+
+    mps = the mps that the mpo will act on (Vector of Arrays)
+
+    Output:
+
+    result = the new mps with increased bond dimension resulting from acting with the mpo input on the mps input
+    """
+    
+    N = length(mps)
+
+    result = Vector{Array{ComplexF64}}(undef, N)
+
+    for i in 1:N
+    
+        tmp = contraction(mpo[i], (4,), mps[i], (3,)) # Does contraction of sigma'_i: W_(b_i-1 b_i sigma_i sigma'_i) M_(a_i-1 a_i sigma'_i) = T_(b_i-1 b_i sigma_i a_i-1 a_i)
+        tmp = permutedims(tmp, (4, 1, 5, 2, 3)) # T_(a_i-1 b_i-1 a_i b_i sigma_i)
+        idx_dims = size(tmp) # returns a tuple of the dimensions of the indices of the tensor T_(a_i-1 b_i-1 a_i b_i sigma_i)
+        result[i] = reshape(tmp, (idx_dims[1]*idx_dims[2], idx_dims[3]*idx_dims[4], idx_dims[5])) # merges the bond indices of i-1 together and the bond indices of i together by reshaping the tensor into having indices of higher dimension 
+
+    end
+
+    return result
+
+end
+
 function get_spin_half_expectation_value(N::Int64, mps::Vector{Array{ComplexF64}}, measure_axis::String)::ComplexF64
 
     """
@@ -454,11 +704,16 @@ function gauge_site(form::Form, M_initial::Array{ComplexF64})::Tuple{Array{Compl
         F = svd(M) # One can recover M by M = U*Diagonal(S)*Vt 
         U = F.U # U_(a_i-1)(s_i-1)
         S = F.S # S_(s_i-1)(s_i-1) although S here is just a vector storing the diagonal elements
+
+        # @test length(S) == min(D_left, d*D_right) # property of SVD, note S is returned as a vector not a diagonal matrix
+
         # Note for complex M_initial, the following should be named Vd for V_dagger rather than Vt for V_transpose but we keep it Vt
         Vt = F.Vt # Vt_(s_i-1)(sigma_i a_i)
         Vt = reshape(Vt, (length(S), d, D_right)) # Unmerging indices: Vt_(s_i-1)(sigma_i a_i) -> Vt_(s_i-1)(sigma_i)(a_i)
         B = permutedims(Vt, (1,3,2)) # Vt_(s_i-1)(sigma_i)(a_i) -> B_(s_i-1)(a_i)(sigma_i)
         US = U*Diagonal(S) # US_(a_i-1)(s_i-1)
+
+        # @test isapprox(contraction(B, (2,3), conj!(deepcopy(B)), (2,3)), I) # right canonical form property
 
         return US, B # US_(a_i-1)(s_i-1), B_(s_i-1)(a_i)(sigma_i)
 
@@ -470,10 +725,15 @@ function gauge_site(form::Form, M_initial::Array{ComplexF64})::Tuple{Array{Compl
         F = svd(M)
         U = F.U # U_(sigma_i a_i-1)(s_i)
         S = F.S # S_(s_i)(s_i) although stored as vector here
+
+        # @test length(S) == min(d*D_left, D_right) # property of SVD, note S is returned as a vector not a diagonal matrix
+
         Vt = F.Vt # Vt_(s_i)(a_i)
         U = reshape(U, (d, D_left, length(S))) # U_(sigma_i)(a_i-1)(s_i)
         A = permutedims(U, (2, 3, 1)) # A_(a_i-1)(s_i)(sigma_i)
         SVt = Diagonal(S)*Vt # SVt_(s_i)(a_i)
+
+        # @test isapprox(contraction(conj!(deepcopy(A)), (1,3), A, (1,3)), I) # left canonical form property
 
         return A, SVt # A_(a_i-1)(s_i)(sigma_i), SVt_(s_i)(a_i)
 
@@ -877,11 +1137,15 @@ end
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-# The command to generate the variational_MPS_algorithm.jl.mem file is:
+# The command which you write in a terminal not in REPL to generate the variational_MPS_algorithm.jl.mem file is:
 # 
 # julia --track-allocation=user variational_MPS_algorithm.jl
 #
-# Then you run the variational_MPS_algorithm.jl and then open the .mem file which will contain the number of memory allocations
+# Then you run the variational_MPS_algorithm.jl again in the terminal with the command:
+#
+# julia variational_MPS_algorithm.jl 
+#
+# and then open the .mem file which will contain the number of memory allocations per line of code.
 
 # function wrapper() # so as to not misallocate and focus on the function we want to probe
 # initialize_MPS(4,2,2) # force compilation
@@ -890,6 +1154,34 @@ end
 # end
 
 # wrapper()
+
+# function wrapped()
+#     N = 4
+#     d = 2
+#     D = 2
+#     J = -1.0
+#     g_x = 0.5
+#     g_z = -0.000001
+#     mpo = get_Ising_MPO(N, J, g_x, g_z)
+#     acc = 10^(-10)
+#     max_sweeps = 10
+#     E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
+    
+#     Profile.clear_malloc_data() # clear allocation
+    
+#     N = 4
+#     d = 2
+#     D = 2
+#     J = -1.0
+#     g_x = 0.5
+#     g_z = -0.000001
+#     mpo = get_Ising_MPO(N, J, g_x, g_z)
+#     acc = 10^(-10)
+#     max_sweeps = 10
+#     E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
+# end
+    
+# wrapped()
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 
@@ -907,16 +1199,16 @@ end
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-N = 4
-d = 2
-D = 2
-J = -1.0
-g_x = 0.5
-g_z = -0.000001
-mpo = get_Ising_MPO(N, J, g_x, g_z)
-acc = 10^(-10)
-max_sweeps = 10
-E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
+# N = 4
+# d = 2
+# D = 2
+# J = -1.0
+# g_x = 0.5
+# g_z = -0.000001
+# mpo = get_Ising_MPO(N, J, g_x, g_z)
+# acc = 10^(-10)
+# max_sweeps = 10
+# E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, max_sweeps)
 # println(inner_product_MPS(mps, mps))
 # println("Minimum energy: ", E_optimal)
 # println("Number of sweeps performed: ", sweep_number)
@@ -929,11 +1221,13 @@ E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, m
 
 # ----------------------------------------------------------------------------------------------------------------------------------
 
-# N_list = [4]
+# # Don't do this at home. At home write data in a text file.
+
+# N_list = [40]
 # d_list = [2]
-# D_list = [2]
+# D_list = [20]
 # J_list = [-1.0]
-# g_x_list = LinRange(0.2, 2.0, 100)
+# g_x_list = LinRange(0.0, 2.0, 100)
 # g_z_list = [-0.1]
 # average_spin_list = []
 # ground_state_energy_list = []
@@ -961,10 +1255,47 @@ E_optimal, mps, sweep_number = variational_ground_state_MPS(N, d, D, mpo, acc, m
 #     end
 # end
 
-# title_str = "N = 4, d = 2, D = 2, J = -1.0, g_z = -0.1"
+# title_str = "N = 40, d = 2, D = 20, J = -1.0, g_z = -0.1"
 # plot(g_x_list, average_spin_list, legend = false, title = latexstring(title_str), titlefontsize = 12) # label = "Magnetisation per site along z-axis"
 # xlabel!(L"g_x")
 # ylabel!("Magnetisation per site along z-axis")
-# # savefig("quantum_phase_transition.pdf")
+# savefig("quantum_phase_transition.pdf")
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+# Checking that the spectrum of the exact Schwinger Hamiltonian agrees with the matrix formed by its MPO
+
+# N = 2
+# x = 1.0
+# m_g_ratio = 0.5
+# l_0 = 0.0
+# lambda = 0.0
+
+# mpo = get_Schwinger_Wilson_MPO(N, l_0, x, lambda, m_g_ratio)
+
+# matrix = mpo_to_matrix(mpo)
+
+# matrix_h = get_Schwinger_hamiltonian_matrix(N, l_0, x, lambda, m_g_ratio)
+
+# display(norm(eigvals(matrix_h)-eigvals(matrix)))
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+
+# Checking that the minimum energy from the variational ground state search agrees with the minimum energy from exact diagonalization
+
+# N = 4
+# x = 1.0
+# m_g_ratio = 0.5
+# l_0 = 0.0
+# lambda = 0.0
+# acc = 10^(-10)
+# max_sweeps = 10
+# d = 2
+# D = 10
+# mpo = get_Schwinger_Wilson_MPO(N, l_0, x, lambda, m_g_ratio)
+# E_0, mps_ground, sn = variational_ground_state_MPS(2*N, d, D, mpo, acc, max_sweeps)
+# println("Minimum energy from variational ground state search: ", E_0)
+# matrix = mpo_to_matrix(mpo)
+# println("Minimum energy from exact diagonalization: ", minimum(eigvals(matrix)))
 
 # ----------------------------------------------------------------------------------------------------------------------------------
