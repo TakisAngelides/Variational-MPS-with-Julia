@@ -475,6 +475,105 @@ function get_Schwinger_Wilson_MPO(N::Int64, l_0::Float64, x::Float64, lambda::Fl
 
 end
 
+function get_local_charge_MPO(N::Int64, site::Int64)::Vector{Array{ComplexF64}}
+
+    """
+    The charge operator for the Schwinger model using Wilson fermions at a particular site is returned as an MPO
+
+    Inputs:
+
+    N = number of physical lattice sites
+
+    site = the site on which to act with the charge operator, on the extended lattice this should be only on even sites from 2 to 2N
+
+    Output:
+
+    mpo = the mpo for a single charge operator on a given site
+    """
+
+    mpo = Vector{Array{ComplexF64}}(undef, 2*N)
+    d = 2
+    D = 2
+    Z = [1.0+0.0im 0.0+0.0im; 0.0+0.0im -1.0+0.0im]
+    I = [1.0+0.0im 0.0+0.0im; 0.0+0.0im 1.0+0.0im]
+
+    for n in 1:2*N
+    
+        if site == n || site - 1 == n
+            if n == 1
+                mpo[n] = zeros((1, D, d, d))
+                mpo[n][1,1,:,:] = -Z/2
+                mpo[n][1,2,:,:] = I
+            elseif n == 2*N
+                mpo[n] = zeros((D, 1, d, d))
+                mpo[n][1,1,:,:] = I
+                mpo[n][2,1,:,:] = -Z/2
+            else
+                mpo[n] = zeros((D, D, d, d))
+                mpo[n][1,1,:,:] = I
+                mpo[n][2,2,:,:] = I
+                mpo[n][2,1,:,:] = -Z/2
+            end
+        else
+            if n == 1
+                mpo[n] = zeros((1, D, d, d))
+                mpo[n][1,2,:,:] = I
+            elseif n == 2*N
+                mpo[n] = zeros((D, 1, d, d))
+                mpo[n][1,1,:,:] = I
+            else
+                mpo[n] = zeros((D, D, d, d))
+                mpo[n][1,1,:,:] = I
+                mpo[n][2,2,:,:] = I
+            end
+        end 
+    
+    end
+
+    return mpo
+
+end
+
+function get_electric_field_configuration(N::Int64, l_0::Float64, mps)::Vector{Float64}
+    
+    """
+    Gets the L_n = l_0 + sum_k=1^N Q_k for the Schwinger model
+
+    Inputs:
+
+    N = number of physical lattice sites
+
+    l_0 = backgroud electric field
+
+    mps = to calculate the electric field configuration of 
+
+    Output:
+
+    electric_field_list = the index of this list is the left edge of the link on which the electric field is described
+
+    """
+    
+    charge_list = []
+    electric_field_list = []
+
+    for n in 2:2:2*N
+
+        charge_mpo = get_local_charge_MPO(N, n)
+        mps_right = act_mpo_on_mps(charge_mpo, mps)
+        append!(charge_list, real(inner_product_MPS(mps, mps_right)))
+    
+    end
+
+    for n in 1:N
+        
+        append!(electric_field_list, l_0 + sum(charge_list[1:n]))
+    
+    end
+
+    return electric_field_list
+
+end
+
 function operator_to_sparse_matrix(operator, idx::Int64, N::Int64)
 
     result = ones(1)
@@ -1299,3 +1398,37 @@ end
 # println("Minimum energy from exact diagonalization: ", minimum(eigvals(matrix)))
 
 # ----------------------------------------------------------------------------------------------------------------------------------
+
+# Check that the penalty term enforces total charge to 0 and checking the local charge MPO
+
+# N = 8
+# x = 1.0
+# m_g_ratio = 0.0
+# l_0 = 0.5 # this is theta/2pi
+# lambda = 100.0
+# acc = 10^(-10)
+# max_sweeps = 10
+# d = 2
+# D = 10
+# mpo = get_Schwinger_Wilson_MPO(N, l_0, x, lambda, m_g_ratio)
+# E_0, mps_ground, sn = variational_ground_state_MPS(2*N, d, D, mpo, acc, max_sweeps)
+# println(get_spin_half_expectation_value(2*N, mps_ground, "z")) # the total charge operator is sum -g/2 sigma_z
+
+# charge_list = []
+
+# for n in 2:2:2*N
+
+#     charge_mpo = get_local_charge_MPO(N, n)
+#     mps_right = act_mpo_on_mps(charge_mpo, mps_ground)
+#     append!(charge_list, inner_product_MPS(mps_ground, mps_right))
+
+# end
+
+# display(charge_list)
+# println(sum(charge_list))
+
+# display(get_electric_field_configuration(N, l_0, mps_ground))
+# display(sum(get_electric_field_configuration(N, l_0, mps_ground))/N)
+
+# ----------------------------------------------------------------------------------------------------------------------------------
+
