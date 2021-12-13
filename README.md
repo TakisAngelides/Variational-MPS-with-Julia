@@ -18,3 +18,5 @@ gets the ground state of the input Hamiltonian. Then we will apply it to the 1D 
 of a topological theta term in the Schwinger model.
 
 Notes and documentation for this project can be found in the file 'Tensor Networks, DMRG and the quantum 1D Ising model' at https://takisangelides.wixsite.com/personal/academic-projects.
+
+The MPS folder is just the variational_MPS_algorithm.jl split into functions.
